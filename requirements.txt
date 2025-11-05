@@ -1,11 +1,10 @@
+--no-cache-dir
 fastapi==0.115.5
 uvicorn[standard]==0.22.0
-pydantic==2.9.2
+pydantic[email]==2.9.2
 python-dotenv==1.0.0
 pymongo==4.10.1
 bcrypt==4.2.0
 PyJWT==2.9.0
 openai==1.3.0
-pillow==9.5.0
-python-multipart==0.0.6
-requests==2.31.0
+pillow==9.0.0
