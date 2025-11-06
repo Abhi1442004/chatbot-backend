@@ -17,10 +17,14 @@ USE_MOCK_AI = os.getenv("USE_MOCK_AI", "false").lower() == "true"
 # -------------------- FASTAPI APP --------------------
 app = FastAPI(title="AI Chatbot with Vision + Multi-Chat")
 
-# CORS SETUP
+# ✅ UPDATED CORS SETUP for Render + Vercel deployment
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_origins=[
+        "http://localhost:3000",              # local dev
+        "http://127.0.0.1:3000",
+        "https://chatbot-webapp.vercel.app",  # your Vercel frontend domain
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -31,18 +35,22 @@ class UserSignup(BaseModel):
     email: str
     password: str
 
+
 class UserLogin(BaseModel):
     email: str
     password: str
+
 
 class ChatRequest(BaseModel):
     query: str
     chat_id: str = None
 
+
 # -------------------- ROOT --------------------
 @app.get("/")
 def root():
     return {"message": "✅ Chatbot API running"}
+
 
 # -------------------- AUTH ROUTES --------------------
 @app.post("/signup")
@@ -52,6 +60,7 @@ def signup(user: UserSignup):
     hashed_pw = create_password_hash(user.password)
     users_collection.insert_one({"email": user.email, "password": hashed_pw})
     return {"message": "Signup successful"}
+
 
 @app.post("/login")
 def login(user: UserLogin):
@@ -64,6 +73,7 @@ def login(user: UserLogin):
     )
     return {"token": token}
 
+
 # -------------------- CHAT ROUTES --------------------
 @app.get("/chats")
 def get_chats(user=Depends(get_current_user)):
@@ -74,6 +84,7 @@ def get_chats(user=Depends(get_current_user)):
         c["_id"] = str(c["_id"])
     return {"chats": chats}
 
+
 @app.post("/new-chat")
 def new_chat(user=Depends(get_current_user)):
     """Create a new empty chat"""
@@ -83,6 +94,7 @@ def new_chat(user=Depends(get_current_user)):
     chat["_id"] = str(result.inserted_id)
     return chat
 
+
 @app.delete("/chat/{chat_id}")
 def delete_chat(chat_id: str, user=Depends(get_current_user)):
     """Delete a chat by ID"""
@@ -91,6 +103,7 @@ def delete_chat(chat_id: str, user=Depends(get_current_user)):
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Chat not found or unauthorized")
     return {"message": "Chat deleted"}
+
 
 @app.get("/chat/{chat_id}")
 def get_chat_messages(chat_id: str, user=Depends(get_current_user)):
@@ -102,6 +115,7 @@ def get_chat_messages(chat_id: str, user=Depends(get_current_user)):
 
     chat["_id"] = str(chat["_id"])
     return {"title": chat.get("title", "Untitled"), "messages": chat.get("messages", [])}
+
 
 @app.post("/chat")
 def chat(request: ChatRequest, user=Depends(get_current_user)):
@@ -151,10 +165,12 @@ def chat(request: ChatRequest, user=Depends(get_current_user)):
             # ✅ Auto-set chat title from first message
             chat_doc = chats_collection.find_one({"_id": ObjectId(request.chat_id)})
             if chat_doc and chat_doc.get("title") == "Untitled Chat":
-                title_preview = request.query[:30] + ("..." if len(request.query) > 30 else "")
+                title_preview = request.query[:30] + (
+                    "..." if len(request.query) > 30 else ""
+                )
                 chats_collection.update_one(
                     {"_id": ObjectId(request.chat_id)},
-                    {"$set": {"title": title_preview}}
+                    {"$set": {"title": title_preview}},
                 )
 
         return {"response": answer}
@@ -162,6 +178,7 @@ def chat(request: ChatRequest, user=Depends(get_current_user)):
     except Exception as e:
         print("❌ Chat Error:", e)
         raise HTTPException(status_code=500, detail=str(e))
+
 
 # -------------------- IMAGE ANALYSIS --------------------
 @app.post("/analyze-image")
@@ -224,6 +241,7 @@ async def analyze_image(
     except Exception as e:
         print("❌ Vision Error:", e)
         raise HTTPException(status_code=500, detail=str(e))
+
 
 # -------------------- TEST ROUTE --------------------
 @app.get("/test-key")
