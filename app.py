@@ -17,13 +17,14 @@ USE_MOCK_AI = os.getenv("USE_MOCK_AI", "false").lower() == "true"
 # -------------------- FASTAPI APP --------------------
 app = FastAPI(title="AI Chatbot with Vision + Multi-Chat")
 
-# ✅ UPDATED CORS SETUP for Render + Vercel deployment
+# ✅ UPDATED CORS SETUP (Render + Vercel + Local dev)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "http://localhost:3000",              # local dev
+        "http://localhost:3000",
         "http://127.0.0.1:3000",
-        "https://chatbot-webapp.vercel.app",  # your Vercel frontend domain
+        "https://chatbot-webapp.vercel.app",  # ✅ Your vercel frontend URL
+        "*"  # ✅ Allow all origins as fallback (important for Render)
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -77,7 +78,6 @@ def login(user: UserLogin):
 # -------------------- CHAT ROUTES --------------------
 @app.get("/chats")
 def get_chats(user=Depends(get_current_user)):
-    """Fetch all chats for the logged-in user"""
     user_id = user["user_id"]
     chats = list(chats_collection.find({"user_id": user_id}, {"_id": 1, "title": 1}))
     for c in chats:
@@ -87,7 +87,6 @@ def get_chats(user=Depends(get_current_user)):
 
 @app.post("/new-chat")
 def new_chat(user=Depends(get_current_user)):
-    """Create a new empty chat"""
     user_id = user["user_id"]
     chat = {"user_id": user_id, "title": "Untitled Chat", "messages": []}
     result = chats_collection.insert_one(chat)
@@ -97,7 +96,6 @@ def new_chat(user=Depends(get_current_user)):
 
 @app.delete("/chat/{chat_id}")
 def delete_chat(chat_id: str, user=Depends(get_current_user)):
-    """Delete a chat by ID"""
     user_id = user["user_id"]
     result = chats_collection.delete_one({"_id": ObjectId(chat_id), "user_id": user_id})
     if result.deleted_count == 0:
@@ -107,7 +105,6 @@ def delete_chat(chat_id: str, user=Depends(get_current_user)):
 
 @app.get("/chat/{chat_id}")
 def get_chat_messages(chat_id: str, user=Depends(get_current_user)):
-    """Return all messages for a specific chat"""
     user_id = user["user_id"]
     chat = chats_collection.find_one({"_id": ObjectId(chat_id), "user_id": user_id})
     if not chat:
@@ -119,7 +116,6 @@ def get_chat_messages(chat_id: str, user=Depends(get_current_user)):
 
 @app.post("/chat")
 def chat(request: ChatRequest, user=Depends(get_current_user)):
-    """Handle text-based chat messages"""
     user_id = user["user_id"]
 
     if USE_MOCK_AI:
@@ -151,7 +147,7 @@ def chat(request: ChatRequest, user=Depends(get_current_user)):
 
         answer = data["choices"][0]["message"]["content"]
 
-        # Save messages to MongoDB
+        # ✅ Save messages to MongoDB
         if request.chat_id:
             chats_collection.update_one(
                 {"_id": ObjectId(request.chat_id)},
@@ -162,12 +158,10 @@ def chat(request: ChatRequest, user=Depends(get_current_user)):
                 {"$push": {"messages": {"sender": "bot", "text": answer}}},
             )
 
-            # ✅ Auto-set chat title from first message
+            # ✅ Auto title generation
             chat_doc = chats_collection.find_one({"_id": ObjectId(request.chat_id)})
             if chat_doc and chat_doc.get("title") == "Untitled Chat":
-                title_preview = request.query[:30] + (
-                    "..." if len(request.query) > 30 else ""
-                )
+                title_preview = request.query[:30] + ("..." if len(request.query) > 30 else "")
                 chats_collection.update_one(
                     {"_id": ObjectId(request.chat_id)},
                     {"$set": {"title": title_preview}},
@@ -188,7 +182,6 @@ async def analyze_image(
     chat_id: str = Form(None),
     user=Depends(get_current_user),
 ):
-    """Analyze image with OpenRouter (GPT-4o mini)"""
     user_id = user["user_id"]
 
     try:
@@ -208,10 +201,7 @@ async def analyze_image(
                         "role": "user",
                         "content": [
                             {"type": "text", "text": prompt},
-                            {
-                                "type": "image_url",
-                                "image_url": f"data:image/png;base64,{image_base64}",
-                            },
+                            {"type": "image_url", "image_url": f"data:image/png;base64,{image_base64}"},
                         ],
                     }
                 ],
@@ -225,7 +215,6 @@ async def analyze_image(
 
         answer = data["choices"][0]["message"]["content"]
 
-        # Save message + answer in chat
         if chat_id:
             chats_collection.update_one(
                 {"_id": ObjectId(chat_id)},
